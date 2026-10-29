@@ -174,9 +174,49 @@ function saveScore_(p, role) {
   return { ok: true, at: now };
 }
 
+/** 다시 편성하기 전에, 지워질 이 반의 점수를 Backup 탭에 읽기 쉬운 형태로 옮겨 둡니다. 옮긴 개수를 돌려줍니다. */
+function backupScores_(cls) {
+  const sc = rows_('Scores').filter(function (r) { return Number(r[0]) === cls; });
+  if (!sc.length) return 0;
+  const grp = {};
+  rows_('Groups').forEach(function (r) {
+    if (Number(r[0]) === cls) grp[Number(r[2])] = { g: Number(r[1]), m: String(r[3]).trim().split(/\s+/).filter(Boolean) };
+  });
+  const nm = {};
+  rows_('Students').forEach(function (r) { if (Number(r[1]) === cls) nm[Number(r[2])] = String(r[3]); });
+  const team = function (id) {
+    return grp[id] ? grp[id].m.map(function (n) { return n + '번 ' + (nm[Number(n)] || ''); }).join(', ') : '팀' + id;
+  };
+  const now = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HH:mm:ss');
+  const out = [];
+  sc.forEach(function (r) {
+    const k = String(r[1]).split('-');
+    const pts = [[r[2], r[3]], [r[4], r[5]], [r[6], r[7]]].filter(function (x) { return x[0] !== '' || x[1] !== ''; })
+      .map(function (x) { return x[0] + ':' + x[1]; }).join(' / ');
+    if (!pts) return;
+    out.push([now, cls, grp[Number(k[0])] ? grp[Number(k[0])].g : '', team(Number(k[0])), team(Number(k[1])), pts, stamp_(r[8]), String(r[9] || ''), isLocked_(r[10]) ? '확정' : '']);
+  });
+  if (!out.length) return 0;
+  const book = SpreadsheetApp.getActiveSpreadsheet();
+  let sh = book.getSheetByName('Backup');
+  if (!sh) {
+    sh = book.insertSheet('Backup');
+    sh.getRange(1, 1, 1, 9).setValues([['백업시각', '반', '조(이전)', '왼쪽 팀', '오른쪽 팀', '점수', '입력시각', '입력자', '확정']]);
+    sh.setFrozenRows(1);
+  }
+  const start = sh.getLastRow() + 1;
+  sh.getRange(start, 6, out.length, 1).setNumberFormat('@');
+  sh.getRange(start, 1, out.length, 9).setValues(out);
+  return out.length;
+}
+
 function saveGroups_(p) {
   const cls = Number(p.cls);
   if (!(cls > 0) || !Array.isArray(p.entries) || !Array.isArray(p.groups)) throw new Error('조 편성 정보가 올바르지 않습니다.');
+  if (rows_('Scores').some(function (r) { return Number(r[0]) === cls && isLocked_(r[10]); })) {
+    return { ok: false, code: 'locked', error: cls + '반에 확정된 경기가 있어 다시 편성할 수 없습니다. 교사 관리에서 먼저 확정 해제를 누르세요.' };
+  }
+  const backed = backupScores_(cls);
   const keepRows = function (name) {
     return rows_(name).filter(function (r) { return Number(r[0]) !== cls && r[0] !== ''; });
   };
@@ -202,9 +242,9 @@ function saveGroups_(p) {
   });
   rewrite('Groups', keepRows('Groups'), add, 4);
   rewrite('Scores', keepRows('Scores').map(function (r) { return r.slice(0, SCORE_COLS); }), [], 0);
-  sheet_('Log').appendRow([Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HH:mm:ss'), 'admin', '교사', cls + '반 조 편성 ' + p.groups.length + '개 조']);
+  sheet_('Log').appendRow([Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HH:mm:ss'), 'admin', '교사', cls + '반 조 편성 ' + p.groups.length + '개 조' + (backed ? ' (지워진 점수 ' + backed + '개를 Backup 탭에 보관)' : '')]);
   bust_();
-  return { ok: true };
+  return { ok: true, backed: backed };
 }
 
 function saveConfig_(p) {
