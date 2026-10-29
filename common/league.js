@@ -175,7 +175,7 @@
       '<select id="wn" aria-label="번호와 이름">' + opts + '</select><button class="btn main" data-act="whook">확인</button></div></div>';
   }
   function adminHtml() {
-    var c = S.cfg, cls = S.cls, n = S.students.filter(function (s) { return s.cls === cls; }).length, g = S.groups[cls] || [];
+    var c = S.cfg, cls = S.cls, n = S.students.filter(function (s) { return s.cls === cls; }).length, g = S.groups[cls] || [], done = progress(cls)[0];
     var sel = function (k, opts) { return '<select data-cf="' + k + '">' + opts.map(function (o) { return '<option value="' + o[0] + '"' + (String(c[k]) === String(o[0]) ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>'; };
     return '<div class="card"><h2>설정</h2><div class="set-grid">' +
       '<label class="f">방식' + sel('mode', [['single', '단식 (개인)'], ['double', '복식 (2인 1팀)']]) + '</label>' +
@@ -188,8 +188,8 @@
       '<div class="card"><h2>' + cls + '반 조 편성</h2><p class="msg" style="margin:0">' + cls + '반 ' + n + '명, 현재 ' + g.length + '개 조.</p>' +
       '<div class="bar"><select id="assign" aria-label="편성 방법"><option value="snake"' + (S.opt.assign === 'snake' ? ' selected' : '') + '>번호순으로 고르게</option><option value="random"' + (S.opt.assign === 'random' ? ' selected' : '') + '>무작위</option></select>' +
       '<select id="split" aria-label="성별"><option value="0"' + (S.opt.split === '0' ? ' selected' : '') + '>남녀 같이</option><option value="1"' + (S.opt.split === '1' ? ' selected' : '') + '>남녀 따로</option></select>' +
-      '<button class="btn warn" data-act="build">' + (S.armed === 'build' ? '정말 편성 (점수 삭제)' : (g.length ? '조 다시 편성' : '조 편성하기')) + '</button></div>' +
-      '<p class="msg" style="margin:0">다시 편성하면 이 반의 점수가 모두 지워집니다.</p></div>' +
+      '<button class="btn warn" data-act="build">' + (S.armed === 'build' ? (done ? '정말 편성 (점수 ' + done + '개 삭제)' : '정말 편성') : (g.length ? '조 다시 편성' : '조 편성하기')) + '</button></div>' +
+      '<p class="msg' + (done ? ' err' : '') + '" style="margin:0">' + (done ? '이 반에 입력된 점수가 ' + done + '개 있습니다. 다시 편성하면 화면에서는 지워지고, 구글 시트의 Backup 탭에 보관됩니다.' : '다시 편성하면 이 반의 점수가 지워집니다.') + ' 확정된 경기가 있으면 먼저 확정을 풀어야 합니다.</p></div>' +
       '<div class="card"><h2>점수 확정</h2><p class="msg" style="margin:0">확정한 경기는 학생이 고칠 수 없습니다. 개별 경기는 시트의 Scores 탭 확정 칸에서도 바꿀 수 있습니다.</p>' +
       '<div class="bar"><button class="btn" data-act="lockall">' + cls + '반 점수 전체 확정</button><button class="btn" data-act="unlockall">확정 해제</button><span class="msg" id="lockmsg"></span></div></div>' +
       '<p class="msg">학생 명렬 수정과 코드 변경은 구글 시트의 Students, Config 탭에서 합니다.</p>';
