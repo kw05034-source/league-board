@@ -10,7 +10,7 @@
     del: function (k) { try { localStorage.removeItem(k); } catch (e) {} }
   };
   var P = 'league-' + C.grade + '-';
-  var S = { opt: { assign: 'snake', split: '0', km: '', kf: '' }, code: ls.get(P + 'code') || '', role: '', cfg: {}, students: [], entries: {}, groups: {}, scores: {},
+  var S = { opt: { assign: 'snake', split: '0', km: '1', kf: '1', ka: '1' }, code: ls.get(P + 'code') || '', role: '', cfg: {}, students: [], entries: {}, groups: {}, scores: {},
     cls: 1, view: 'play', who: null, status: '', armed: null, err: '', pick: false };
   try { S.who = JSON.parse(ls.get(P + 'who')); } catch (e) {}
   var pending = {}, timers = {};
@@ -179,30 +179,34 @@
     var sel = function (k, opts) { return '<select data-cf="' + k + '">' + opts.map(function (o) { return '<option value="' + o[0] + '"' + (String(c[k]) === String(o[0]) ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>'; };
     return '<div class="card"><h2>설정</h2><div class="set-grid">' +
       '<label class="f">방식' + sel('mode', [['single', '단식 (개인)'], ['double', '복식 (2인 1팀)']]) + '</label>' +
-      '<label class="f">조 크기' + sel('size', [3, 4, 5, 6, 7, 8].map(function (v) { return [v, v]; })) + '</label>' +
       '<label class="f">경기 방식' + sel('sets', [[1, '1세트 점수제'], [3, '3세트']]) + '</label>' +
       '<label class="f">승점 (승)<input type="number" data-cf="win" value="' + c.win + '"></label>' +
       '<label class="f">승점 (무)<input type="number" data-cf="draw" value="' + c.draw + '"></label>' +
       '<label class="f">승점 (패)<input type="number" data-cf="loss" value="' + c.loss + '"></label></div>' +
-      '<p class="msg" style="margin:0">설정을 바꾸면 모든 학생 화면에 바로 적용됩니다. 방식과 조 크기는 조 편성을 다시 해야 반영됩니다.</p></div>' +
+      '<p class="msg" style="margin:0">설정을 바꾸면 모든 학생 화면에 바로 적용됩니다. 방식은 조 편성을 다시 해야 반영됩니다.</p></div>' +
       '<div class="card"><h2>' + cls + '반 조 편성</h2><p class="msg" style="margin:0">' + cls + '반 ' + n + '명, 현재 ' + g.length + '개 조.</p>' +
       '<div class="bar"><select id="assign" aria-label="편성 방법"><option value="snake"' + (S.opt.assign === 'snake' ? ' selected' : '') + '>번호순으로 고르게</option><option value="random"' + (S.opt.assign === 'random' ? ' selected' : '') + '>무작위</option></select>' +
       '<select id="split" aria-label="성별"><option value="0"' + (S.opt.split === '0' ? ' selected' : '') + '>남녀 같이</option><option value="1"' + (S.opt.split === '1' ? ' selected' : '') + '>남녀 따로</option></select>' +
       '<button class="btn warn" data-act="build">' + (S.armed === 'build' ? (done ? '정말 편성 (점수 ' + done + '개 삭제)' : '정말 편성') : (g.length ? '조 다시 편성' : '조 편성하기')) + '</button></div>' +
-      '<div class="bar"><label class="f">남 조 수<input type="number" id="km" min="1" max="30" placeholder="자동" style="width:72px" value="' + esc(S.opt.km) + '"></label>' +
-      '<label class="f">여 조 수<input type="number" id="kf" min="1" max="30" placeholder="자동" style="width:72px" value="' + esc(S.opt.kf) + '"></label></div>' +
-      '<p class="msg" style="margin:0">조 수는 "남녀 따로"일 때만 적용됩니다. 비워 두면 조 크기로 자동 계산합니다.</p>' +
+      '<div class="bar">' + (S.opt.split === '1'
+        ? '<label class="f">남 조 수<input type="number" id="km" min="1" max="30" style="width:72px" value="' + esc(S.opt.km) + '"></label><label class="f">여 조 수<input type="number" id="kf" min="1" max="30" style="width:72px" value="' + esc(S.opt.kf) + '"></label>'
+        : '<label class="f">조 수<input type="number" id="ka" min="1" max="30" style="width:72px" value="' + esc(S.opt.ka) + '"></label>') + '</div>' +
+      '<p class="msg" style="margin:0">조 수를 1로 하면 전원이 한 조(풀리그)입니다. 한 조는 최소 2명이 되도록 자동으로 줄입니다.</p>' +
       '<p class="msg' + (done ? ' err' : '') + '" style="margin:0">' + (done ? '이 반에 입력된 점수가 ' + done + '개 있습니다. 다시 편성하면 화면에서는 지워지고, 구글 시트의 Backup 탭에 보관됩니다.' : '다시 편성하면 이 반의 점수가 지워집니다.') + ' 확정된 경기가 있으면 먼저 확정을 풀어야 합니다.</p></div>' +
       '<div class="card"><h2>점수 확정</h2><p class="msg" style="margin:0">확정한 경기는 학생이 고칠 수 없습니다. 개별 경기는 시트의 Scores 탭 확정 칸에서도 바꿀 수 있습니다.</p>' +
       '<div class="bar"><button class="btn" data-act="lockall">' + cls + '반 점수 전체 확정</button><button class="btn" data-act="unlockall">확정 해제</button><span class="msg" id="lockmsg"></span></div></div>' +
       '<p class="msg">학생 명렬 수정과 코드 변경은 구글 시트의 Students, Config 탭에서 합니다.</p>';
   }
 
+  function readOpt() {
+    var g = function (id, d) { var e = $(id); return e ? e.value : d; };
+    S.opt = { assign: g('#assign', S.opt.assign), split: g('#split', S.opt.split), km: g('#km', S.opt.km), kf: g('#kf', S.opt.kf), ka: g('#ka', S.opt.ka) };
+  }
   /* ---------- 조 편성 ---------- */
   function shuffle(a) { for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
   function buildGroups(cls, assign, split, kcount) {
     var list = S.students.filter(function (s) { return s.cls === cls; }).sort(function (a, b) { return a.no - b.no; });
-    var parts = [list]; kcount = split ? (kcount || {}) : {};
+    var parts = [list]; kcount = kcount || {};
     if (split) {
       var seen = [], by = {};
       ['남', '여'].forEach(function (x) { seen.push(x); });
@@ -216,8 +220,8 @@
         var p = assign === 'random' ? shuffle(part.slice()) : part;
         for (var i = 0; i < p.length; i += 2) { var e = { id: entries.length, members: p.slice(i, i + 2).map(function (s) { return s.no; }) }; entries.push(e); mine.push(e); }
       } else part.forEach(function (s) { var e = { id: entries.length, members: [s.no] }; entries.push(e); mine.push(e); });
-      var want = part.length && kcount[part[0].sex] > 0 ? Math.min(Math.floor(kcount[part[0].sex]), Math.max(1, Math.floor(mine.length / 2))) : 0;
-      var k = want || Math.max(1, Math.ceil(mine.length / S.cfg.size)), gs = [];
+      var kk = Math.floor(kcount[split && part.length ? part[0].sex : '*']) || 1;
+      var k = Math.max(1, Math.min(kk, Math.floor(mine.length / 2))), gs = [];
       for (var q = 0; q < k; q++) gs.push([]);
       var order = assign === 'random' ? shuffle(mine.slice()) : mine;
       order.forEach(function (e, i) { var r = Math.floor(i / k); gs[r % 2 === 0 ? i % k : k - 1 - (i % k)].push(e.id); });
@@ -292,8 +296,8 @@
       if (!s) return; S.who = { cls: c, no: n, name: s.name }; S.pick = false; ls.set(P + 'who', JSON.stringify(S.who));
     }
     else if (t.dataset.act === 'build') {
-      if (S.armed !== 'build') { S.opt = { assign: $('#assign').value, split: $('#split').value, km: $('#km').value, kf: $('#kf').value }; S.armed = 'build'; render(); return; }
-      S.armed = null; var b = buildGroups(S.cls, $('#assign').value, $('#split').value === '1', { '남': +$('#km').value || 0, '여': +$('#kf').value || 0 });
+      if (S.armed !== 'build') { readOpt(); S.armed = 'build'; render(); return; }
+      S.armed = null; var b = buildGroups(S.cls, S.opt.assign, S.opt.split === '1', { '남': +S.opt.km || 1, '여': +S.opt.kf || 1, '*': +S.opt.ka || 1 });
       S.status = '저장 중…'; setStatus();
       api('saveGroups', { cls: S.cls, entries: b.entries, groups: b.groups }).then(function () { S.status = '조 편성을 저장했습니다.'; return refresh(true); })
         .catch(function (er) { S.status = '저장 실패: ' + er.message; render(); });
@@ -309,6 +313,9 @@
   });
   document.addEventListener('change', function (e) {
     var el = e.target;
+    if (el.id === 'split' || el.id === 'assign' || el.id === 'km' || el.id === 'kf' || el.id === 'ka') {
+      var was = S.opt.split; readOpt(); if (S.opt.split !== was) render(); return;
+    }
     if (el.id === 'wc') {
       $('#wn').innerHTML = S.students.filter(function (s) { return s.cls === +el.value; }).map(function (s) { return '<option value="' + s.no + '">' + s.no + '번 ' + esc(s.name) + '</option>'; }).join('');
       return;
