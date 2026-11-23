@@ -3,20 +3,50 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0f6b57">
 <title>2학년 배드민턴 리그전</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=Noto+Sans+KR:wght@400;500;700&display=swap">
-<link rel="stylesheet" href="../common/league.css">
+<link rel="stylesheet" href="../common/league.css?v=6">
 </head>
-<body>
+<body class="bd">
 <div class="wrap">
-  <div class="top"><h1 id="title">2학년 배드민턴 리그전</h1><span class="sub" id="sub"></span></div>
+  <header class="hero">
+    <div class="hero-text">
+      <span class="chip">BADMINTON · LEAGUE</span>
+      <h1 id="title">2학년 배드민턴 리그전</h1>
+      <p class="hero-sub">우리 반 풀리그, 점수를 입력하고 확인을 눌러요</p>
+      <span class="sub" id="sub"></span>
+    </div>
+    <svg class="art" viewBox="0 0 320 220" role="img" aria-label="배드민턴 라켓과 셔틀콕" xmlns="http://www.w3.org/2000/svg">
+  <g transform="rotate(-32 110 120)">
+    <rect x="104" y="150" width="12" height="62" rx="6" fill="#0f3d33"/>
+    <rect x="101" y="190" width="18" height="24" rx="6" fill="#ffd166"/>
+    <path d="M106 150 L96 126 M114 150 L124 126" stroke="#0f3d33" stroke-width="5" stroke-linecap="round"/>
+    <ellipse cx="110" cy="76" rx="48" ry="62" fill="rgba(255,255,255,.14)" stroke="#fff" stroke-width="7"/>
+    <g stroke="#fff" stroke-width="1.6" opacity=".75">
+      <path d="M110 16V136M80 22V130M140 22V130M64 36V116M156 36V116M52 56V96M168 56V96"/>
+      <path d="M52 56H168M48 76H172M52 96H168M60 36H160M66 116H154M74 130H146M76 22H144"/>
+    </g>
+  </g>
+  <g transform="rotate(28 238 80)"><g class="bob">
+    <path d="M222 68 L216 14 L260 14 L254 68 Z" fill="#fff"/>
+    <path d="M228 68 L226 14 M238 68 L238 14 M248 68 L250 14" stroke="#cfe9df" stroke-width="2"/>
+    <path d="M216 14 Q238 24 260 14" fill="none" stroke="#9fd6c4" stroke-width="3"/>
+    <path d="M222 68 Q238 80 254 68 Z" fill="#ffd166"/>
+    <circle cx="238" cy="78" r="13" fill="#ff7a45"/>
+    <ellipse cx="233" cy="74" rx="4" ry="3" fill="#ffc6a8"/>
+  </g></g>
+  <path d="M20 208 H300" stroke="rgba(255,255,255,.55)" stroke-width="3" stroke-dasharray="2 10" stroke-linecap="round"/>
+</svg>
+  </header>
   <div id="banner"></div>
-  <div class="bar" id="clsBar"></div>
-  <div class="bar" id="viewBar"></div>
+  <nav class="bar" id="clsBar" aria-label="반 선택"></nav>
+  <nav class="bar" id="viewBar" aria-label="보기 선택"></nav>
   <span class="msg" id="status"></span>
   <div id="main"></div>
+  <footer class="foot">점수는 구글 시트에 저장됩니다 · 확인 버튼을 눌러야 반영돼요</footer>
 </div>
 <script src="config.js"></script>
-<script src="../common/league.js"></script>
+<script src="../common/league.js?v=6"></script>
 </body>
 </html>
