@@ -10,7 +10,7 @@
     del: function (k) { try { localStorage.removeItem(k); } catch (e) {} }
   };
   var P = 'league-' + C.grade + '-';
-  var S = { opt: { assign: 'snake', split: '0', km: '1', kf: '1', ka: '1' }, code: ls.get(P + 'code') || '', role: '', cfg: {}, students: [], entries: {}, groups: {}, scores: {},
+  var S = { draft: {}, opt: { assign: 'snake', split: '0', km: '1', kf: '1', ka: '1' }, code: ls.get(P + 'code') || '', role: '', cfg: {}, students: [], entries: {}, groups: {}, scores: {},
     cls: 1, view: 'play', who: null, status: '', armed: null, err: '', pick: false };
   try { S.who = JSON.parse(ls.get(P + 'who')); } catch (e) {}
   var pending = {}, timers = {};
@@ -113,18 +113,28 @@
         return '<tr class="' + (i === 0 && any ? 'first' : '') + '"><td class="rank">' + (any ? i + 1 : '-') + '</td><td class="nm">' + label(ent[r.id]) + '</td><td>' + r.p + '</td><td>' + r.w + '</td><td>' + r.d + '</td><td>' + r.l + '</td><td><b>' + r.pt + '</b></td><td>' + r.sf + ':' + r.sa + '</td><td>' + (d > 0 ? '+' : '') + d + '</td></tr>';
       }).join('') + '</tbody></table></div>';
   }
+  function hasScore(sets) {
+    return (sets || []).some(function (t) { return t && ((t[0] !== '' && t[0] != null) || (t[1] !== '' && t[1] != null)); });
+  }
   function matchHtml(cls, gi, x, y) {
-    var key = x + '-' + y, rec = S.scores[cls + '|' + key], sets = rec ? rec.sets : [], n = S.cfg.sets, r = result(sets);
-    var locked = rec && rec.locked && S.role !== 'admin', ent = S.entries[cls], inputs = '';
+    var key = x + '-' + y, id = cls + '|' + key, rec = S.scores[id], saved = rec ? rec.sets : [], n = S.cfg.sets, r = result(saved);
+    var has = hasScore(saved), draft = S.draft[id], editing = !!draft || !has, sets = draft || saved;
+    var locked = rec && rec.locked && S.role !== 'admin', ent = S.entries[cls], inputs = '', off = (locked || !editing) ? ' disabled' : '';
     for (var i = 0; i < n; i++) {
       var s = sets[i] || ['', ''], pre = n > 1 ? (i + 1) + '세트 ' : '';
       inputs += '<div class="set">' + (n > 1 ? '<span>' + (i + 1) + '세트</span>' : '') +
-        '<input type="number" inputmode="numeric" min="0" max="99" aria-label="' + pre + '왼쪽 점수" data-k="' + key + '" data-i="' + i + '" data-s="0" value="' + s[0] + '"' + (locked ? ' disabled' : '') + '>' +
+        '<input type="number" inputmode="numeric" min="0" max="99" aria-label="' + pre + '왼쪽 점수" data-k="' + key + '" data-i="' + i + '" data-s="0" value="' + s[0] + '"' + off + '>' +
         '<span>:</span>' +
-        '<input type="number" inputmode="numeric" min="0" max="99" aria-label="' + pre + '오른쪽 점수" data-k="' + key + '" data-i="' + i + '" data-s="1" value="' + s[1] + '"' + (locked ? ' disabled' : '') + '></div>';
+        '<input type="number" inputmode="numeric" min="0" max="99" aria-label="' + pre + '오른쪽 점수" data-k="' + key + '" data-i="' + i + '" data-s="1" value="' + s[1] + '"' + off + '></div>';
     }
     var tags = (n > 1 && r ? '<span class="tag done">' + r.wa + ' : ' + r.wb + '</span>' : '') + (rec && rec.locked ? '<span class="tag lock">확정</span>' : '');
-    return '<div class="match" data-g="' + gi + '" data-k="' + key + '"><div class="side ' + (r && r.w === 'a' ? 'win' : '') + '">' + label(ent[x]) + '</div><div class="sc">' + inputs + tags + '</div><div class="side r ' + (r && r.w === 'b' ? 'win' : '') + '">' + label(ent[y]) + '</div></div>';
+    var btns = '';
+    if (!locked) {
+      btns = editing
+        ? '<div class="acts"><button class="btn main" data-act="ok" data-k="' + key + '">확인</button>' + (has ? '<button class="btn" data-act="cancelEdit" data-k="' + key + '">취소</button>' : '') + '</div>'
+        : '<div class="acts"><button class="btn" data-act="edit" data-k="' + key + '">수정</button></div>';
+    }
+    return '<div class="match" data-g="' + gi + '" data-k="' + key + '"><div class="side ' + (r && r.w === 'a' ? 'win' : '') + '">' + label(ent[x]) + '</div><div class="sc">' + inputs + tags + btns + '</div><div class="side r ' + (r && r.w === 'b' ? 'win' : '') + '">' + label(ent[y]) + '</div></div>';
   }
   function whoStr() { return S.role === 'admin' ? '교사' : (S.who ? S.who.cls + '반 ' + S.who.no + '번 ' + S.who.name : ''); }
   function setStatus() { var el = $('#status'); if (el) { el.textContent = S.status; el.className = 'msg' + (/실패|수 없/.test(S.status) ? ' err' : ''); } }
@@ -242,10 +252,21 @@
   }
 
   /* ---------- 저장 ---------- */
-  function queueSave(cls, key) {
-    var id = cls + '|' + key; pending[id] = true; clearTimeout(timers[id]);
-    S.status = '저장 중…'; setStatus();
-    timers[id] = setTimeout(function () { doSave(cls, key); }, 600);
+  function confirmScore(cls, key) {
+    var id = cls + '|' + key, d = (S.draft[id] || []).slice(), n = S.cfg.sets, sets = [], any = false;
+    for (var i = 0; i < 3; i++) {
+      var t = d[i] || ['', ''], a = t[0], b = t[1], ea = a === '' || a == null, eb = b === '' || b == null;
+      if (i < n && ea !== eb) { S.status = '점수는 양쪽 모두 입력하세요.'; setStatus(); return; }
+      if (!ea && !eb) any = true;
+      sets.push(i < n ? [ea ? '' : a, eb ? '' : b] : ['', '']);
+    }
+    var rec = S.scores[id] || { sets: [], locked: false };
+    if (!any && !hasScore(rec.sets) && !S.draft[id]) { S.status = '점수를 입력하세요.'; setStatus(); return; }
+    S.scores[id] = { sets: sets, locked: rec.locked, by: whoStr(), at: rec.at };
+    delete S.draft[id];
+    pending[id] = true; clearTimeout(timers[id]); S.status = '저장 중…';
+    doSave(cls, key);
+    render();
   }
   function doSave(cls, key) {
     var id = cls + '|' + key, rec = S.scores[id];
@@ -295,9 +316,12 @@
       var c = +$('#wc').value, n = +$('#wn').value, s = stu(c, n);
       if (!s) return; S.who = { cls: c, no: n, name: s.name }; S.pick = false; ls.set(P + 'who', JSON.stringify(S.who));
     }
+    else if (t.dataset.act === 'ok') { confirmScore(S.cls, t.dataset.k); return; }
+    else if (t.dataset.act === 'edit') { var eid = S.cls + '|' + t.dataset.k, er = S.scores[eid]; S.draft[eid] = (er && er.sets ? er.sets : []).map(function (q) { return (q || ['', '']).slice(); }); S.status = ''; }
+    else if (t.dataset.act === 'cancelEdit') { delete S.draft[S.cls + '|' + t.dataset.k]; S.status = ''; }
     else if (t.dataset.act === 'build') {
       if (S.armed !== 'build') { readOpt(); S.armed = 'build'; render(); return; }
-      S.armed = null; var b = buildGroups(S.cls, S.opt.assign, S.opt.split === '1', { '남': +S.opt.km || 1, '여': +S.opt.kf || 1, '*': +S.opt.ka || 1 });
+      S.armed = null; S.draft = {}; var b = buildGroups(S.cls, S.opt.assign, S.opt.split === '1', { '남': +S.opt.km || 1, '여': +S.opt.kf || 1, '*': +S.opt.ka || 1 });
       S.status = '저장 중…'; setStatus();
       api('saveGroups', { cls: S.cls, entries: b.entries, groups: b.groups }).then(function () { S.status = '조 편성을 저장했습니다.'; return refresh(true); })
         .catch(function (er) { S.status = '저장 실패: ' + er.message; render(); });
@@ -327,15 +351,11 @@
   });
   document.addEventListener('input', function (e) {
     var el = e.target; if (!el.dataset || !el.dataset.k) return;
-    var cls = S.cls, key = el.dataset.k, i = +el.dataset.i, s = +el.dataset.s, id = cls + '|' + key;
-    var rec = S.scores[id] || (S.scores[id] = { sets: [], locked: false });
-    while (rec.sets.length < 3) rec.sets.push(['', '']);
-    rec.sets[i] = rec.sets[i].slice(); rec.sets[i][s] = el.value === '' ? '' : Math.max(0, Math.min(99, Math.floor(+el.value)));
-    var row = el.closest('.match'), gi = +row.dataset.g, r = result(rec.sets);
-    row.children[0].classList.toggle('win', !!r && r.w === 'a'); row.children[2].classList.toggle('win', !!r && r.w === 'b');
-    row.closest('[data-card]').querySelector('.st').innerHTML = standHtml(cls, gi);
-    var pr = progress(cls); document.querySelector('.prog').textContent = cls + '반 진행 ' + pr[0] + ' / ' + pr[1] + '경기';
-    queueSave(cls, key);
+    var cls = S.cls, key = el.dataset.k, i = +el.dataset.i, side = +el.dataset.s, id = cls + '|' + key;
+    var d = S.draft[id];
+    if (!d) { var sv = S.scores[id]; d = S.draft[id] = (sv && sv.sets ? sv.sets : []).map(function (q) { return (q || ['', '']).slice(); }); }
+    while (d.length < 3) d.push(['', '']);
+    d[i] = d[i].slice(); d[i][side] = el.value === '' ? '' : Math.max(0, Math.min(99, Math.floor(+el.value)));
   });
 
   /* ---------- 시작 ---------- */

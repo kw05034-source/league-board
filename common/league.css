@@ -46,6 +46,7 @@ tr.first td{background:var(--accent-soft);font-weight:700}
 .set input:focus{border-color:var(--accent)}
 .set input:disabled{opacity:.6}
 .set span{color:var(--muted)}
+.acts{display:flex;gap:6px;margin-top:2px}.acts .btn{padding:6px 14px}
 .tag{font-size:11px;padding:1px 7px;border-radius:999px;background:var(--bg);color:var(--muted)}
 .tag.done{background:var(--accent-soft);color:var(--accent)}
 .tag.lock{background:var(--ball-soft);color:var(--ball)}
