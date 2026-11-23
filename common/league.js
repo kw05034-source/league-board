@@ -10,7 +10,7 @@
     del: function (k) { try { localStorage.removeItem(k); } catch (e) {} }
   };
   var P = 'league-' + C.grade + '-';
-  var S = { draft: {}, open: {}, opt: { assign: 'snake', split: '0', km: '1', kf: '1', ka: '1' }, code: ls.get(P + 'code') || '', role: '', cfg: {}, students: [], entries: {}, groups: {}, scores: {},
+  var S = { draft: {}, open: {}, late: {}, opt: { assign: 'snake', split: '0', km: '1', kf: '1', ka: '1' }, code: ls.get(P + 'code') || '', role: '', cfg: {}, students: [], entries: {}, groups: {}, scores: {},
     cls: 1, view: 'play', who: null, status: '', armed: null, err: '', pick: false };
   try { S.who = JSON.parse(ls.get(P + 'who')); } catch (e) {}
   var pending = {}, timers = {};
@@ -29,11 +29,12 @@
   function stu(cls, no) { return S.students.find(function (s) { return s.cls === cls && s.no === no; }); }
   function apply(j) {
     S.role = j.role; S.cfg = j.config; S.students = j.students;
-    S.entries = {}; S.groups = {};
+    S.entries = {}; S.groups = {}; S.late = {};
     var rows = j.groups.slice().sort(function (a, b) { return a.cls - b.cls || a.group - b.group || a.entry - b.entry; });
     rows.forEach(function (g) {
       var m = String(g.members).trim().split(/\s+/).filter(Boolean).map(function (n) { return stu(g.cls, +n); }).filter(Boolean);
       (S.entries[g.cls] = S.entries[g.cls] || {})[g.entry] = { id: g.entry, m: m };
+      if (g.late) (S.late[g.cls] = S.late[g.cls] || {})[g.entry] = true;
       var arr = (S.groups[g.cls] = S.groups[g.cls] || []);
       (arr[g.group - 1] = arr[g.group - 1] || []).push(g.entry);
     });
@@ -53,16 +54,23 @@
   }
   function refresh(force) {
     return api('load').then(function (j) {
-      var before = JSON.stringify([S.groups, S.scores, S.cfg]);
+      var before = JSON.stringify([S.groups, S.scores, S.cfg, S.students, S.late]);
       apply(j);
-      var after = JSON.stringify([S.groups, S.scores, S.cfg]);
+      var after = JSON.stringify([S.groups, S.scores, S.cfg, S.students, S.late]);
       var typing = document.activeElement && document.activeElement.closest && document.activeElement.closest('.match');
       if (force || (before !== after && !typing)) render();
     });
   }
 
   /* ---------- 경기 계산 ---------- */
-  function schedule(ids) {
+  function schedule(ids, cls) {
+    var late = (S.late && S.late[cls]) || {}, base = ids.filter(function (i) { return !late[i]; }), extra = [];
+    ids.forEach(function (id, i) { if (late[id]) for (var j = 0; j < i; j++) extra.push([ids[j], id]); });
+    var rounds = circle(base);
+    if (extra.length) { extra.extra = true; rounds.push(extra); }
+    return rounds;
+  }
+  function circle(ids) {
     var a = ids.slice(); if (a.length % 2) a.push(null);
     var n = a.length, rounds = [];
     for (var r = 0; r < n - 1; r++) {
@@ -85,7 +93,7 @@
   function standings(cls, gi) {
     var ids = S.groups[cls][gi], rows = {}, c = S.cfg;
     ids.forEach(function (id) { rows[id] = { id: id, p: 0, w: 0, d: 0, l: 0, pt: 0, sf: 0, sa: 0, pf: 0, pa: 0 }; });
-    schedule(ids).forEach(function (rd) { rd.forEach(function (m) {
+    schedule(ids, cls).forEach(function (rd) { rd.forEach(function (m) {
       var x = m[0], y = m[1], r = result(setsOf(cls, x + '-' + y)); if (!r) return;
       var A = rows[x], B = rows[y]; A.p++; B.p++;
       A.sf += r.wa; A.sa += r.wb; B.sf += r.wb; B.sa += r.wa; A.pf += r.pa; A.pa += r.pb; B.pf += r.pb; B.pa += r.pa;
@@ -98,7 +106,7 @@
   }
   function progress(cls) {
     var t = 0, d = 0;
-    (S.groups[cls] || []).forEach(function (g) { schedule(g).forEach(function (rd) { rd.forEach(function (m) {
+    (S.groups[cls] || []).forEach(function (g) { schedule(g, cls).forEach(function (rd) { rd.forEach(function (m) {
       t++; if (result(setsOf(cls, m[0] + '-' + m[1]))) d++; }); }); });
     return [d, t];
   }
@@ -170,11 +178,11 @@
     m.innerHTML = head + '<div class="groups">' + g.map(function (ids, gi) {
       var firstOpen = false;
       return '<div class="card" data-card="' + gi + '"><h2>' + gName(S.cls, gi) + '</h2>' +
-        schedule(ids).map(function (rd, ri) {
+        schedule(ids, S.cls).map(function (rd, ri) {
           var k = S.cls + '|' + gi + '|' + ri, done = rd.filter(function (mm) { return result(setsOf(S.cls, mm[0] + '-' + mm[1])); }).length;
           if (S.open[k] === undefined) { S.open[k] = !firstOpen && done < rd.length; if (S.open[k]) firstOpen = true; }
           else if (S.open[k] && done < rd.length) firstOpen = true;
-          return '<details class="rd' + (done === rd.length ? ' alldone' : '') + '" data-ok="' + k + '"' + (S.open[k] ? ' open' : '') + '><summary><span class="round">' + (ri + 1) + '라운드</span><span class="rcount">' + done + ' / ' + rd.length + ' 완료</span></summary>' +
+          return '<details class="rd' + (done === rd.length ? ' alldone' : '') + '" data-ok="' + k + '"' + (S.open[k] ? ' open' : '') + '><summary><span class="round">' + (rd.extra ? '전학생 경기' : (ri + 1) + '라운드') + '</span><span class="rcount">' + done + ' / ' + rd.length + ' 완료</span></summary>' +
             rd.map(function (mm) { return matchHtml(S.cls, gi, mm[0], mm[1]); }).join('') + '</details>';
         }).join('') + '</div>';
     }).join('') + '</div>';
@@ -210,6 +218,13 @@
         : '<label class="f">조 수<input type="number" id="ka" min="1" max="30" style="width:72px" value="' + esc(S.opt.ka) + '"></label>') + '</div>' +
       '<p class="msg" style="margin:0">조 수를 1로 하면 전원이 한 조(풀리그)입니다. 한 조는 최소 2명이 되도록 자동으로 줄입니다.</p>' +
       '<p class="msg' + (done ? ' err' : '') + '" style="margin:0">' + (done ? '이 반에 입력된 점수가 ' + done + '개 있습니다. 다시 편성하면 화면에서는 지워지고, 구글 시트의 Backup 탭에 보관됩니다.' : '다시 편성하면 이 반의 점수가 지워집니다.') + ' 확정된 경기가 있으면 먼저 확정을 풀어야 합니다.</p></div>' +
+      '<div class="card"><h2>전학생 추가</h2><p class="msg" style="margin:0">' + cls + '반에 새 학생을 추가합니다. 이름은 구글 시트 Students 탭에 저장됩니다.</p>' +
+      '<div class="set-grid"><label class="f">번호 (비우면 자동)<input type="number" id="ns-no" min="1" max="99" inputmode="numeric"></label>' +
+      '<label class="f">이름<input type="text" id="ns-name" maxlength="20" autocomplete="off"></label>' +
+      '<label class="f">성별<select id="ns-sex"><option value="남">남</option><option value="여">여</option></select></label>' +
+      '<label class="f">들어갈 조<select id="ns-g"><option value="0">조에 넣지 않음</option>' + g.map(function (_, gi) { return '<option value="' + (gi + 1) + '">' + gName(cls, gi) + '</option>'; }).join('') + '</select></label></div>' +
+      '<div class="bar"><button class="btn main" data-act="addstu">추가</button></div>' +
+      '<p class="msg" style="margin:0">조에 넣으면 그 조 사람들과의 경기가 \'전학생 경기\'로 따로 생깁니다. 이미 입력된 점수와 라운드는 그대로입니다. 조에 넣지 않으면 다음 조 편성 때 포함됩니다.</p></div>' +
       '<div class="card"><h2>점수 확정</h2><p class="msg" style="margin:0">확정한 경기는 학생이 고칠 수 없습니다. 개별 경기는 시트의 Scores 탭 확정 칸에서도 바꿀 수 있습니다.</p>' +
       '<div class="bar"><button class="btn" data-act="lockall">' + cls + '반 점수 전체 확정</button><button class="btn" data-act="unlockall">확정 해제</button><span class="msg" id="lockmsg"></span></div></div>' +
       '<p class="msg">학생 명렬 수정과 코드 변경은 구글 시트의 Students, Config 탭에서 합니다.</p>';
@@ -333,6 +348,15 @@
       S.status = '저장 중…'; setStatus();
       api('saveGroups', { cls: S.cls, entries: b.entries, groups: b.groups }).then(function () { S.status = '조 편성을 저장했습니다.'; return refresh(true); })
         .catch(function (er) { S.status = '저장 실패: ' + er.message; render(); });
+      return;
+    }
+    else if (t.dataset.act === 'addstu') {
+      var nm = $('#ns-name').value.trim(), nno = $('#ns-no').value, gsel = +$('#ns-g').value, ncls = S.cls;
+      if (!nm) { S.status = '이름을 입력하세요.'; setStatus(); return; }
+      S.status = '추가 중…'; setStatus();
+      api('addStudent', { cls: ncls, grade: C.grade, no: nno === '' ? 0 : +nno, name: nm, sex: $('#ns-sex').value, group: gsel })
+        .then(function (j) { S.status = ncls + '반 ' + j.no + '번 ' + nm + ' 학생을 추가했습니다' + (j.group ? ' (' + gName(ncls, j.group - 1) + ')' : '') + '.'; return refresh(true); })
+        .catch(function (er) { S.status = '추가 실패: ' + er.message; setStatus(); });
       return;
     }
     else if (t.dataset.act === 'lockall' || t.dataset.act === 'unlockall') {
