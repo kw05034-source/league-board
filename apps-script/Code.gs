@@ -7,7 +7,7 @@ const TZ = 'Asia/Seoul';
 const HEAD = {
   Students: ['학년', '반', '번호', '이름', '성별'],
   Config: ['항목', '값'],
-  Groups: ['반', '조', '팀번호', '번호들'],
+  Groups: ['반', '조', '팀번호', '번호들', '추가'],
   Scores: ['반', '경기', '1세트 왼쪽', '1세트 오른쪽', '2세트 왼쪽', '2세트 오른쪽', '3세트 왼쪽', '3세트 오른쪽', '입력시각', '입력자', '확정'],
   Log: ['시각', '권한', '입력자', '내용']
 };
@@ -101,6 +101,7 @@ function doPost(e) {
       if (role !== 'admin') return out_({ ok: false, code: 'forbidden', error: '교사만 할 수 있습니다.' });
       if (p.action === 'saveGroups') return out_(saveGroups_(p));
       if (p.action === 'saveConfig') return out_(saveConfig_(p));
+      if (p.action === 'addStudent') return out_(addStudent_(p, cfg));
       if (p.action === 'setLock') return out_(setLock_(p));
       return out_({ ok: false, error: '알 수 없는 요청입니다.' });
     } finally { lock.releaseLock(); }
@@ -116,7 +117,7 @@ function load_(cfg, role) {
   const students = rows_('Students').filter(function (r) { return String(r[3]).trim() !== ''; })
     .map(function (r) { return { cls: Number(r[1]), no: Number(r[2]), name: String(r[3]).trim(), sex: String(r[4] || '') }; });
   const groups = rows_('Groups').filter(function (r) { return r[0] !== ''; })
-    .map(function (r) { return { cls: Number(r[0]), group: Number(r[1]), entry: Number(r[2]), members: String(r[3]) }; });
+    .map(function (r) { return { cls: Number(r[0]), group: Number(r[1]), entry: Number(r[2]), members: String(r[3]), late: String(r[4] === undefined ? '' : r[4]).trim() !== '' }; });
   const scores = rows_('Scores').filter(function (r) { return r[0] !== ''; }).map(function (r) {
     const sets = [];
     for (let i = 0; i < 3; i++) sets.push([r[2 + i * 2], r[3 + i * 2]]);
@@ -218,7 +219,10 @@ function saveGroups_(p) {
   }
   const backed = backupScores_(cls);
   const keepRows = function (name) {
-    return rows_(name).filter(function (r) { return Number(r[0]) !== cls && r[0] !== ''; });
+    const w = HEAD[name].length;
+    return rows_(name).filter(function (r) { return Number(r[0]) !== cls && r[0] !== ''; }).map(function (r) {
+      const x = r.slice(0, w); while (x.length < w) x.push(''); return x;
+    });
   };
   const rewrite = function (name, keep, add, textCol) {
     const sh = sheet_(name);
@@ -237,7 +241,7 @@ function saveGroups_(p) {
     g.forEach(function (id) {
       const en = byId[id];
       if (!en) throw new Error('팀 정보가 없습니다.');
-      add.push([cls, gi + 1, Number(id), en.members.join(' ')]);
+      add.push([cls, gi + 1, Number(id), en.members.join(' '), '']);
     });
   });
   rewrite('Groups', keepRows('Groups'), add, 4);
@@ -282,4 +286,43 @@ function setLock_(p) {
   }
   bust_();
   return { ok: true, count: n };
+}
+
+/**
+ * 전학생 추가: Students 탭에 한 줄을 더하고, 조를 골랐으면 그 조의 새 팀으로 넣습니다.
+ * 조에 넣은 학생은 Groups 탭 '추가' 칸에 표시되어, 이미 정해진 라운드와 입력된 점수는 그대로 유지됩니다.
+ */
+function addStudent_(p, cfg) {
+  const cls = Number(p.cls), name = String(p.name || '').trim().slice(0, 20), group = Number(p.group) || 0;
+  if (!(cls > 0)) throw new Error('반 정보가 올바르지 않습니다.');
+  if (!name) throw new Error('이름을 입력하세요.');
+  const sex = p.sex === '여' ? '여' : p.sex === '남' ? '남' : '';
+  const stu = rows_('Students').filter(function (r) { return Number(r[1]) === cls && String(r[3]).trim() !== ''; });
+  let no = Number(p.no) || 0;
+  if (no) {
+    if (stu.some(function (r) { return Number(r[2]) === no; })) throw new Error(cls + '반 ' + no + '번은 이미 있습니다. 번호를 비우면 자동으로 정합니다.');
+  } else {
+    stu.forEach(function (r) { if (Number(r[2]) > no) no = Number(r[2]); });
+    no += 1;
+  }
+  let gid = 0;
+  if (group > 0) {
+    if (cfg.mode === 'double') throw new Error('복식에서는 조에 바로 넣을 수 없습니다. 조에 넣지 않고 추가한 뒤 조를 다시 편성하세요.');
+    const grows = rows_('Groups').filter(function (r) { return Number(r[0]) === cls; });
+    if (!grows.some(function (r) { return Number(r[1]) === group; })) throw new Error(cls + '반에 ' + group + '조가 없습니다.');
+    grows.forEach(function (r) { if (Number(r[2]) > gid) gid = Number(r[2]); });
+    gid += 1;
+  }
+  const st = sheet_('Students');
+  st.appendRow([Number(p.grade) || '', cls, no, name, sex]);
+  if (gid) {
+    const gs = sheet_('Groups');
+    if (!String(gs.getRange(1, 5).getValue()).trim()) gs.getRange(1, 5).setValue(HEAD.Groups[4]);
+    const row = gs.getLastRow() + 1;
+    gs.getRange(row, 4).setNumberFormat('@');
+    gs.getRange(row, 1, 1, 5).setValues([[cls, group, gid, String(no), 1]]);
+  }
+  sheet_('Log').appendRow([Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HH:mm:ss'), 'admin', '교사', cls + '반 전학생 추가 ' + no + '번' + (gid ? ' (' + group + '조에 편성)' : '')]);
+  bust_();
+  return { ok: true, no: no, group: group };
 }
