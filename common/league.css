@@ -122,3 +122,15 @@ body.tt .empty::before{content:"🏓"}
 .gate{border-radius:16px}
 #viewBar .grow{flex:0 0 6px;min-width:0}
 .hero h1,.hero-sub{word-break:keep-all;text-wrap:balance}
+
+/* 라운드 접기/펼치기 */
+details.rd{border-top:1px solid var(--line);padding-top:6px}
+details.rd>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 2px;min-height:44px;-webkit-tap-highlight-color:transparent}
+details.rd>summary::-webkit-details-marker{display:none}
+details.rd>summary::after{content:"";width:9px;height:9px;border-right:2.5px solid var(--muted);border-bottom:2.5px solid var(--muted);transform:rotate(45deg);transition:transform .15s;margin:0 6px 4px 0;flex:none}
+details.rd[open]>summary::after{transform:rotate(-135deg);margin:6px 6px 0 0}
+details.rd>summary .round{margin:0}
+.rcount{margin-left:auto;font-size:12px;color:var(--muted);font-weight:700}
+details.rd.alldone .rcount{color:var(--accent)}
+details.rd.alldone .round{background:var(--accent);color:var(--accent-ink)}
+details.rd>.match:first-of-type{border-top:0}

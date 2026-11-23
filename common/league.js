@@ -10,7 +10,7 @@
     del: function (k) { try { localStorage.removeItem(k); } catch (e) {} }
   };
   var P = 'league-' + C.grade + '-';
-  var S = { draft: {}, opt: { assign: 'snake', split: '0', km: '1', kf: '1', ka: '1' }, code: ls.get(P + 'code') || '', role: '', cfg: {}, students: [], entries: {}, groups: {}, scores: {},
+  var S = { draft: {}, open: {}, opt: { assign: 'snake', split: '0', km: '1', kf: '1', ka: '1' }, code: ls.get(P + 'code') || '', role: '', cfg: {}, students: [], entries: {}, groups: {}, scores: {},
     cls: 1, view: 'play', who: null, status: '', armed: null, err: '', pick: false };
   try { S.who = JSON.parse(ls.get(P + 'who')); } catch (e) {}
   var pending = {}, timers = {};
@@ -168,8 +168,15 @@
       return;
     }
     m.innerHTML = head + '<div class="groups">' + g.map(function (ids, gi) {
-      return '<div class="card" data-card="' + gi + '"><h2>' + gName(S.cls, gi) + '</h2><div class="st">' + standHtml(S.cls, gi) + '</div>' +
-        schedule(ids).map(function (rd, ri) { return '<div><div class="round">' + (ri + 1) + '라운드</div>' + rd.map(function (mm) { return matchHtml(S.cls, gi, mm[0], mm[1]); }).join('') + '</div>'; }).join('') + '</div>';
+      var firstOpen = false;
+      return '<div class="card" data-card="' + gi + '"><h2>' + gName(S.cls, gi) + '</h2>' +
+        schedule(ids).map(function (rd, ri) {
+          var k = S.cls + '|' + gi + '|' + ri, done = rd.filter(function (mm) { return result(setsOf(S.cls, mm[0] + '-' + mm[1])); }).length;
+          if (S.open[k] === undefined) { S.open[k] = !firstOpen && done < rd.length; if (S.open[k]) firstOpen = true; }
+          else if (S.open[k] && done < rd.length) firstOpen = true;
+          return '<details class="rd' + (done === rd.length ? ' alldone' : '') + '" data-ok="' + k + '"' + (S.open[k] ? ' open' : '') + '><summary><span class="round">' + (ri + 1) + '라운드</span><span class="rcount">' + done + ' / ' + rd.length + ' 완료</span></summary>' +
+            rd.map(function (mm) { return matchHtml(S.cls, gi, mm[0], mm[1]); }).join('') + '</details>';
+        }).join('') + '</div>';
     }).join('') + '</div>';
   }
   function renderGate() {
@@ -304,6 +311,7 @@
       ls.set(P + 'code', S.code); S.err = ''; S.gateTeacher = false; apply(j); render();
     }).catch(function (er) { S.err = er.code === 'bad_code' ? '코드가 맞지 않습니다.' : '불러오지 못했습니다: ' + er.message; S.code = ''; renderGate(); });
   });
+  document.addEventListener('toggle', function (e) { var d = e.target; if (d && d.dataset && d.dataset.ok) S.open[d.dataset.ok] = d.open; }, true);
   document.addEventListener('click', function (e) {
     var t = e.target.closest('button'); if (!t) return;
     if (t.dataset.cls) { S.cls = +t.dataset.cls; S.armed = null; }
@@ -321,7 +329,7 @@
     else if (t.dataset.act === 'cancelEdit') { delete S.draft[S.cls + '|' + t.dataset.k]; S.status = ''; }
     else if (t.dataset.act === 'build') {
       if (S.armed !== 'build') { readOpt(); S.armed = 'build'; render(); return; }
-      S.armed = null; S.draft = {}; var b = buildGroups(S.cls, S.opt.assign, S.opt.split === '1', { '남': +S.opt.km || 1, '여': +S.opt.kf || 1, '*': +S.opt.ka || 1 });
+      S.armed = null; S.draft = {}; S.open = {}; var b = buildGroups(S.cls, S.opt.assign, S.opt.split === '1', { '남': +S.opt.km || 1, '여': +S.opt.kf || 1, '*': +S.opt.ka || 1 });
       S.status = '저장 중…'; setStatus();
       api('saveGroups', { cls: S.cls, entries: b.entries, groups: b.groups }).then(function () { S.status = '조 편성을 저장했습니다.'; return refresh(true); })
         .catch(function (er) { S.status = '저장 실패: ' + er.message; render(); });
