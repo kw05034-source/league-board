@@ -134,3 +134,15 @@ details.rd>summary .round{margin:0}
 details.rd.alldone .rcount{color:var(--accent)}
 details.rd.alldone .round{background:var(--accent);color:var(--accent-ink)}
 details.rd>.match:first-of-type{border-top:0}
+
+/* 명단 관리 */
+.srow{display:flex;align-items:center;gap:8px;padding:6px 2px;border-top:1px solid var(--line);flex-wrap:wrap}
+.srow .sno{width:28px;text-align:right;color:var(--muted);font-weight:700;font-size:13px}
+.srow .snm{flex:1;min-width:80px;font-weight:700}
+.srow .ssx{color:var(--muted);font-size:13px;width:20px}
+.srow .btn{padding:5px 12px;font-size:13px}
+.srow.out .snm{text-decoration:line-through;color:var(--muted)}
+.srow.out em{font-style:normal;font-size:11px;background:var(--accent-soft);color:var(--accent);padding:1px 7px;border-radius:999px;text-decoration:none;display:inline-block}
+.srow.edit input{flex:1;min-width:90px;padding:7px 10px;border:2px solid var(--line);border-radius:8px;font:inherit}
+.srow.edit select{padding:7px;border-radius:8px}
+.btn.danger{background:#c2321f;color:#fff;border-color:#c2321f}

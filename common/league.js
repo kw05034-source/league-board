@@ -10,7 +10,7 @@
     del: function (k) { try { localStorage.removeItem(k); } catch (e) {} }
   };
   var P = 'league-' + C.grade + '-';
-  var S = { draft: {}, open: {}, late: {}, opt: { assign: 'snake', split: '0', km: '1', kf: '1', ka: '1' }, code: ls.get(P + 'code') || '', role: '', cfg: {}, students: [], entries: {}, groups: {}, scores: {},
+  var S = { draft: {}, open: {}, late: {}, editStu: null, opt: { assign: 'snake', split: '0', km: '1', kf: '1', ka: '1' }, code: ls.get(P + 'code') || '', role: '', cfg: {}, students: [], entries: {}, groups: {}, scores: {},
     cls: 1, view: 'play', who: null, status: '', armed: null, err: '', pick: false };
   try { S.who = JSON.parse(ls.get(P + 'who')); } catch (e) {}
   var pending = {}, timers = {};
@@ -80,6 +80,7 @@
     }
     return rounds;
   }
+  function gone(cls, id) { var e = S.entries[cls] && S.entries[cls][id]; return !!(e && e.m.some(function (s) { return s.out; })); }
   function setsOf(cls, key) { var s = S.scores[cls + '|' + key]; return s ? s.sets : []; }
   function result(sets) {
     var f = sets.filter(function (s) { return s && s[0] !== '' && s[1] !== '' && s[0] != null && s[1] != null; });
@@ -92,9 +93,9 @@
   }
   function standings(cls, gi) {
     var ids = S.groups[cls][gi], rows = {}, c = S.cfg;
-    ids.forEach(function (id) { rows[id] = { id: id, p: 0, w: 0, d: 0, l: 0, pt: 0, sf: 0, sa: 0, pf: 0, pa: 0 }; });
+    ids.forEach(function (id) { if (gone(cls, id)) return; rows[id] = { id: id, p: 0, w: 0, d: 0, l: 0, pt: 0, sf: 0, sa: 0, pf: 0, pa: 0 }; });
     schedule(ids, cls).forEach(function (rd) { rd.forEach(function (m) {
-      var x = m[0], y = m[1], r = result(setsOf(cls, x + '-' + y)); if (!r) return;
+      var x = m[0], y = m[1]; if (gone(cls, x) || gone(cls, y)) return; var r = result(setsOf(cls, x + '-' + y)); if (!r) return;
       var A = rows[x], B = rows[y]; A.p++; B.p++;
       A.sf += r.wa; A.sa += r.wb; B.sf += r.wb; B.sa += r.wa; A.pf += r.pa; A.pa += r.pb; B.pf += r.pb; B.pa += r.pa;
       if (r.w === 'a') { A.w++; B.l++; A.pt += c.win; B.pt += c.loss; }
@@ -107,6 +108,7 @@
   function progress(cls) {
     var t = 0, d = 0;
     (S.groups[cls] || []).forEach(function (g) { schedule(g, cls).forEach(function (rd) { rd.forEach(function (m) {
+      if (gone(cls, m[0]) || gone(cls, m[1])) return;
       t++; if (result(setsOf(cls, m[0] + '-' + m[1]))) d++; }); }); });
     return [d, t];
   }
@@ -178,7 +180,9 @@
     m.innerHTML = head + '<div class="groups">' + g.map(function (ids, gi) {
       var firstOpen = false;
       return '<div class="card" data-card="' + gi + '"><h2>' + gName(S.cls, gi) + '</h2>' +
-        schedule(ids, S.cls).map(function (rd, ri) {
+        schedule(ids, S.cls).map(function (rd0, ri) {
+          var rd = rd0.filter(function (mm) { return !gone(S.cls, mm[0]) && !gone(S.cls, mm[1]); }); rd.extra = rd0.extra;
+          if (!rd.length) return '';
           var k = S.cls + '|' + gi + '|' + ri, done = rd.filter(function (mm) { return result(setsOf(S.cls, mm[0] + '-' + mm[1])); }).length;
           if (S.open[k] === undefined) { S.open[k] = !firstOpen && done < rd.length; if (S.open[k]) firstOpen = true; }
           else if (S.open[k] && done < rd.length) firstOpen = true;
@@ -194,13 +198,13 @@
   }
   function pickHtml() {
     var cl = classes(), first = cl[0];
-    var opts = S.students.filter(function (s) { return s.cls === first; }).map(function (s) { return '<option value="' + s.no + '">' + s.no + '번 ' + esc(s.name) + '</option>'; }).join('');
+    var opts = S.students.filter(function (s) { return s.cls === first && !s.out; }).map(function (s) { return '<option value="' + s.no + '">' + s.no + '번 ' + esc(s.name) + '</option>'; }).join('');
     return '<div class="card"><h2>나는 누구인가요?</h2><p class="msg" style="margin:0">점수를 입력한 사람이 기록에 남습니다.</p><div class="bar">' +
       '<select id="wc" aria-label="반">' + cl.map(function (c) { return '<option value="' + c + '">' + c + '반</option>'; }).join('') + '</select>' +
       '<select id="wn" aria-label="번호와 이름">' + opts + '</select><button class="btn main" data-act="whook">확인</button></div></div>';
   }
   function adminHtml() {
-    var c = S.cfg, cls = S.cls, n = S.students.filter(function (s) { return s.cls === cls; }).length, g = S.groups[cls] || [], done = progress(cls)[0];
+    var c = S.cfg, cls = S.cls, n = S.students.filter(function (s) { return s.cls === cls && !s.out; }).length, g = S.groups[cls] || [], done = progress(cls)[0];
     var sel = function (k, opts) { return '<select data-cf="' + k + '">' + opts.map(function (o) { return '<option value="' + o[0] + '"' + (String(c[k]) === String(o[0]) ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>'; };
     return '<div class="card"><h2>설정</h2><div class="set-grid">' +
       '<label class="f">방식' + sel('mode', [['single', '단식 (개인)'], ['double', '복식 (2인 1팀)']]) + '</label>' +
@@ -218,6 +222,14 @@
         : '<label class="f">조 수<input type="number" id="ka" min="1" max="30" style="width:72px" value="' + esc(S.opt.ka) + '"></label>') + '</div>' +
       '<p class="msg" style="margin:0">조 수를 1로 하면 전원이 한 조(풀리그)입니다. 한 조는 최소 2명이 되도록 자동으로 줄입니다.</p>' +
       '<p class="msg' + (done ? ' err' : '') + '" style="margin:0">' + (done ? '이 반에 입력된 점수가 ' + done + '개 있습니다. 다시 편성하면 화면에서는 지워지고, 구글 시트의 Backup 탭에 보관됩니다.' : '다시 편성하면 이 반의 점수가 지워집니다.') + ' 확정된 경기가 있으면 먼저 확정을 풀어야 합니다.</p></div>' +
+      '<div class="card"><h2>학생 명단 관리</h2><details class="rd" data-ok="roster|' + cls + '"' + (S.open['roster|' + cls] ? ' open' : '') + '><summary><span class="round">' + cls + '반 ' + S.students.filter(function (s) { return s.cls === cls; }).length + '명 보기</span></summary>' +
+      S.students.filter(function (s) { return s.cls === cls; }).sort(function (a, b) { return a.no - b.no; }).map(function (s) {
+        if (S.editStu === cls + '|' + s.no) return '<div class="srow edit"><span class="sno">' + s.no + '</span><input type="text" id="es-name" maxlength="20" value="' + esc(s.name) + '" autocomplete="off"><select id="es-sex"><option value="남"' + (s.sex === '남' ? ' selected' : '') + '>남</option><option value="여"' + (s.sex === '여' ? ' selected' : '') + '>여</option></select><button class="btn main" data-act="stusave" data-no="' + s.no + '">저장</button><button class="btn" data-act="stucancel">취소</button></div>';
+        return '<div class="srow' + (s.out ? ' out' : '') + '"><span class="sno">' + s.no + '</span><span class="snm">' + esc(s.name) + (s.out ? ' <em>전출</em>' : '') + '</span><span class="ssx">' + esc(s.sex) + '</span>' +
+          (s.out ? '<button class="btn" data-act="stuback" data-no="' + s.no + '">전출 취소</button>' :
+            '<button class="btn" data-act="stuedit" data-no="' + s.no + '">수정</button><button class="btn' + (S.armed === 'out:' + s.no ? ' danger' : '') + '" data-act="stuout" data-no="' + s.no + '">' + (S.armed === 'out:' + s.no ? '정말 전출' : '전출') + '</button>') + '</div>';
+      }).join('') + '</details>' +
+      '<p class="msg" style="margin:0">이름·성별은 고칠 수 있고, 번호는 바꾸지 않습니다. 전출 처리하면 그 학생의 경기는 화면과 순위에서 빠지지만 점수 기록은 시트에 남습니다(취소하면 되돌아옵니다).</p></div>' +
       '<div class="card"><h2>전학생 추가</h2><p class="msg" style="margin:0">' + cls + '반에 새 학생을 추가합니다. 이름은 구글 시트 Students 탭에 저장됩니다.</p>' +
       '<div class="set-grid"><label class="f">번호 (비우면 자동)<input type="number" id="ns-no" min="1" max="99" inputmode="numeric"></label>' +
       '<label class="f">이름<input type="text" id="ns-name" maxlength="20" autocomplete="off"></label>' +
@@ -237,7 +249,7 @@
   /* ---------- 조 편성 ---------- */
   function shuffle(a) { for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
   function buildGroups(cls, assign, split, kcount) {
-    var list = S.students.filter(function (s) { return s.cls === cls; }).sort(function (a, b) { return a.no - b.no; });
+    var list = S.students.filter(function (s) { return s.cls === cls && !s.out; }).sort(function (a, b) { return a.no - b.no; });
     var parts = [list]; kcount = kcount || {};
     if (split) {
       var seen = [], by = {};
@@ -350,6 +362,25 @@
         .catch(function (er) { S.status = '저장 실패: ' + er.message; render(); });
       return;
     }
+    else if (t.dataset.act === 'stuedit') { S.editStu = S.cls + '|' + t.dataset.no; S.armed = null; S.open['roster|' + S.cls] = true; }
+    else if (t.dataset.act === 'stucancel') { S.editStu = null; }
+    else if (t.dataset.act === 'stusave') {
+      var sn = +t.dataset.no, snm = $('#es-name').value.trim();
+      if (!snm) { S.status = '이름을 입력하세요.'; setStatus(); return; }
+      api('updateStudent', { cls: S.cls, no: sn, name: snm, sex: $('#es-sex').value })
+        .then(function () { S.editStu = null; S.status = sn + '번 정보를 저장했습니다.'; return refresh(true); })
+        .catch(function (er) { S.status = '저장 실패: ' + er.message; setStatus(); });
+      return;
+    }
+    else if (t.dataset.act === 'stuout' || t.dataset.act === 'stuback') {
+      var on = +t.dataset.no, isOut = t.dataset.act === 'stuout';
+      if (isOut && S.armed !== 'out:' + on) { S.armed = 'out:' + on; render(); return; }
+      S.armed = null;
+      api('withdrawStudent', { cls: S.cls, no: on, out: isOut })
+        .then(function () { S.status = on + '번 ' + (isOut ? '전출 처리했습니다.' : '전출을 취소했습니다.'); return refresh(true); })
+        .catch(function (er) { S.status = '실패: ' + er.message; setStatus(); });
+      return;
+    }
     else if (t.dataset.act === 'addstu') {
       var nm = $('#ns-name').value.trim(), nno = $('#ns-no').value, gsel = +$('#ns-g').value, ncls = S.cls;
       if (!nm) { S.status = '이름을 입력하세요.'; setStatus(); return; }
@@ -373,7 +404,7 @@
       var was = S.opt.split; readOpt(); if (S.opt.split !== was) render(); return;
     }
     if (el.id === 'wc') {
-      $('#wn').innerHTML = S.students.filter(function (s) { return s.cls === +el.value; }).map(function (s) { return '<option value="' + s.no + '">' + s.no + '번 ' + esc(s.name) + '</option>'; }).join('');
+      $('#wn').innerHTML = S.students.filter(function (s) { return s.cls === +el.value && !s.out; }).map(function (s) { return '<option value="' + s.no + '">' + s.no + '번 ' + esc(s.name) + '</option>'; }).join('');
       return;
     }
     if (el.dataset.cf) {
