@@ -5,7 +5,7 @@
  */
 const TZ = 'Asia/Seoul';
 const HEAD = {
-  Students: ['학년', '반', '번호', '이름', '성별'],
+  Students: ['학년', '반', '번호', '이름', '성별', '상태'],
   Config: ['항목', '값'],
   Groups: ['반', '조', '팀번호', '번호들', '추가'],
   Scores: ['반', '경기', '1세트 왼쪽', '1세트 오른쪽', '2세트 왼쪽', '2세트 오른쪽', '3세트 왼쪽', '3세트 오른쪽', '입력시각', '입력자', '확정'],
@@ -102,6 +102,8 @@ function doPost(e) {
       if (p.action === 'saveGroups') return out_(saveGroups_(p));
       if (p.action === 'saveConfig') return out_(saveConfig_(p));
       if (p.action === 'addStudent') return out_(addStudent_(p, cfg));
+      if (p.action === 'updateStudent') return out_(updateStudent_(p));
+      if (p.action === 'withdrawStudent') return out_(withdrawStudent_(p));
       if (p.action === 'setLock') return out_(setLock_(p));
       return out_({ ok: false, error: '알 수 없는 요청입니다.' });
     } finally { lock.releaseLock(); }
@@ -115,7 +117,7 @@ function load_(cfg, role) {
   const hit = cache.get('load');
   if (hit) { const d = JSON.parse(hit); d.role = role; return d; }
   const students = rows_('Students').filter(function (r) { return String(r[3]).trim() !== ''; })
-    .map(function (r) { return { cls: Number(r[1]), no: Number(r[2]), name: String(r[3]).trim(), sex: String(r[4] || '') }; });
+    .map(function (r) { return { cls: Number(r[1]), no: Number(r[2]), name: String(r[3]).trim(), sex: String(r[4] || ''), out: String(r[5] === undefined ? '' : r[5]).trim() !== '' }; });
   const groups = rows_('Groups').filter(function (r) { return r[0] !== ''; })
     .map(function (r) { return { cls: Number(r[0]), group: Number(r[1]), entry: Number(r[2]), members: String(r[3]), late: String(r[4] === undefined ? '' : r[4]).trim() !== '' }; });
   const scores = rows_('Scores').filter(function (r) { return r[0] !== ''; }).map(function (r) {
@@ -325,4 +327,36 @@ function addStudent_(p, cfg) {
   sheet_('Log').appendRow([Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HH:mm:ss'), 'admin', '교사', cls + '반 전학생 추가 ' + no + '번' + (gid ? ' (' + group + '조에 편성)' : '')]);
   bust_();
   return { ok: true, no: no, group: group };
+}
+
+function studentRow_(cls, no) {
+  const sh = sheet_('Students'), data = sh.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (Number(data[i][1]) === cls && Number(data[i][2]) === no && String(data[i][3]).trim() !== '') return { sh: sh, row: i + 1 };
+  }
+  throw new Error(cls + '반 ' + no + '번 학생을 찾을 수 없습니다.');
+}
+function now_() { return Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HH:mm:ss'); }
+
+/** 이름과 성별만 고칩니다. 번호는 조 편성과 점수의 기준이라 바꾸지 않습니다. */
+function updateStudent_(p) {
+  const cls = Number(p.cls), no = Number(p.no), name = String(p.name || '').trim().slice(0, 20);
+  if (!name) throw new Error('이름을 입력하세요.');
+  const sex = p.sex === '여' ? '여' : p.sex === '남' ? '남' : '';
+  const f = studentRow_(cls, no);
+  f.sh.getRange(f.row, 4, 1, 2).setValues([[name, sex]]);
+  sheet_('Log').appendRow([now_(), 'admin', '교사', cls + '반 ' + no + '번 명단 수정']);
+  bust_();
+  return { ok: true };
+}
+
+/** 전출 처리(또는 취소). 학생 줄은 지우지 않고 '상태' 칸에 표시만 해서, 점수 기록은 그대로 남습니다. */
+function withdrawStudent_(p) {
+  const cls = Number(p.cls), no = Number(p.no), out = !!p.out;
+  const f = studentRow_(cls, no);
+  if (!String(f.sh.getRange(1, 6).getValue()).trim()) f.sh.getRange(1, 6).setValue(HEAD.Students[5]);
+  f.sh.getRange(f.row, 6).setValue(out ? '전출' : '');
+  sheet_('Log').appendRow([now_(), 'admin', '교사', cls + '반 ' + no + '번 ' + (out ? '전출 처리' : '전출 취소')]);
+  bust_();
+  return { ok: true };
 }
