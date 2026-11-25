@@ -237,6 +237,18 @@
       '<select id="wc" aria-label="반">' + cl.map(function (c) { return '<option value="' + c + '">' + c + '반</option>'; }).join('') + '</select>' +
       '<select id="wn" aria-label="번호와 이름">' + opts + '</select><button class="btn main" data-act="whook">확인</button></div></div>';
   }
+  /* 그 반에서 양쪽 모두 해당 성별인 경기의 입력된 점수 개수 */
+  function sexScoreCount(cls, sex) {
+    var ent = S.entries[cls] || {}, n = 0;
+    Object.keys(S.scores).forEach(function (id) {
+      if (id.split('|')[0] !== String(cls)) return;
+      var k = id.split('|')[1].split('-'), a = ent[k[0]], b = ent[k[1]];
+      if (!a || !b || !result(S.scores[id].sets || [])) return;
+      var all = function (e) { return e.m.length > 0 && e.m.every(function (s) { return s.sex === sex; }); };
+      if (all(a) && all(b)) n++;
+    });
+    return n;
+  }
   function adminHtml() {
     var c = S.cfg, cls = S.cls, n = S.students.filter(function (s) { return s.cls === cls && !s.out; }).length, g = S.groups[cls] || [], done = progress(cls)[0];
     var sel = function (k, opts) { return '<select data-cf="' + k + '">' + opts.map(function (o) { return '<option value="' + o[0] + '"' + (String(c[k]) === String(o[0]) ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>'; };
@@ -256,6 +268,9 @@
         : '<label class="f">조 수<input type="number" id="ka" min="1" max="30" style="width:72px" value="' + esc(S.opt.ka) + '"></label>') + '</div>' +
       '<p class="msg" style="margin:0">조 수를 1로 하면 전원이 한 조(풀리그)입니다. 한 조는 최소 2명이 되도록 자동으로 줄입니다.</p>' +
       '<p class="msg' + (done ? ' err' : '') + '" style="margin:0">' + (done ? '이 반에 입력된 점수가 ' + done + '개 있습니다. 다시 편성하면 화면에서는 지워지고, 구글 시트의 Backup 탭에 보관됩니다.' : '다시 편성하면 이 반의 점수가 지워집니다.') + ' 확정된 경기가 있으면 먼저 확정을 풀어야 합니다.</p></div>' +
+      '<div class="card"><h2>' + cls + '반 점수 초기화</h2><p class="msg" style="margin:0">조 편성은 그대로 두고, 한 성별의 경기 점수만 지웁니다. 지운 점수는 구글 시트의 Backup 탭에 보관됩니다.</p>' +
+      '<div class="bar">' + ['남', '여'].map(function (x) { var k = sexScoreCount(cls, x); return '<button class="btn' + (S.armed === 'clr:' + x ? ' danger' : '') + '" data-act="clr" data-sex="' + x + '"' + (k ? '' : ' disabled') + '>' + (S.armed === 'clr:' + x ? '정말 ' + x + ' 점수 ' + k + '개 지우기' : x + '자 점수 초기화 (' + k + '개)') + '</button>'; }).join('') + '</div>' +
+      '<p class="msg" style="margin:0">남녀 같이 편성한 조에서 남녀가 맞붙은 경기는 어느 쪽에도 속하지 않아 지워지지 않습니다. 확정된 경기가 있으면 먼저 확정을 풀어야 합니다.</p></div>' +
       '<div class="card"><h2>학생 명단 관리</h2><details class="rd" data-ok="roster|' + cls + '"' + (S.open['roster|' + cls] ? ' open' : '') + '><summary><span class="round">' + cls + '반 ' + S.students.filter(function (s) { return s.cls === cls; }).length + '명 보기</span></summary>' +
       S.students.filter(function (s) { return s.cls === cls; }).sort(function (a, b) { return a.no - b.no; }).map(function (s) {
         if (S.editStu === cls + '|' + s.no) return '<div class="srow edit"><span class="sno">' + s.no + '</span><input type="text" id="es-name" maxlength="20" value="' + esc(s.name) + '" autocomplete="off"><select id="es-sex"><option value="남"' + (s.sex === '남' ? ' selected' : '') + '>남</option><option value="여"' + (s.sex === '여' ? ' selected' : '') + '>여</option></select><button class="btn main" data-act="stusave" data-no="' + s.no + '">저장</button><button class="btn" data-act="stucancel">취소</button></div>';
@@ -394,6 +409,15 @@
       S.status = '저장 중…'; setStatus();
       api('saveGroups', { cls: S.cls, entries: b.entries, groups: b.groups }).then(function () { S.status = '조 편성을 저장했습니다.'; return refresh(true); })
         .catch(function (er) { S.status = '저장 실패: ' + er.message; render(); });
+      return;
+    }
+    else if (t.dataset.act === 'clr') {
+      var cx = t.dataset.sex;
+      if (S.armed !== 'clr:' + cx) { S.armed = 'clr:' + cx; render(); return; }
+      S.armed = null; S.status = '지우는 중…'; render();
+      api('clearScores', { cls: S.cls, sex: cx })
+        .then(function (j) { S.draft = {}; S.status = S.cls + '반 ' + cx + '자 점수 ' + (j.backed || 0) + '개를 지웠습니다(Backup 탭에 보관).'; S.scores = {}; return refresh(true); })
+        .catch(function (er) { S.status = '초기화 실패: ' + er.message; render(); });
       return;
     }
     else if (t.dataset.act === 'stuedit') { S.editStu = S.cls + '|' + t.dataset.no; S.armed = null; S.open['roster|' + S.cls] = true; }
