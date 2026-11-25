@@ -105,6 +105,7 @@ function doPost(e) {
       if (p.action === 'saveScore') return out_(saveScore_(p, role));
       if (role !== 'admin') return out_({ ok: false, code: 'forbidden', error: '교사만 할 수 있습니다.' });
       if (p.action === 'saveGroups') return out_(saveGroups_(p));
+      if (p.action === 'clearScores') return out_(clearScores_(p));
       if (p.action === 'saveConfig') return out_(saveConfig_(p));
       if (p.action === 'addStudent') return out_(addStudent_(p, cfg));
       if (p.action === 'updateStudent') return out_(updateStudent_(p));
@@ -194,8 +195,8 @@ function saveScore_(p, role) {
 }
 
 /** 다시 편성하기 전에, 지워질 이 반의 점수를 Backup 탭에 읽기 쉬운 형태로 옮겨 둡니다. 옮긴 개수를 돌려줍니다. */
-function backupScores_(cls) {
-  const sc = rows_('Scores').filter(function (r) { return Number(r[0]) === cls; });
+function backupScores_(cls, pred) {
+  const sc = rows_('Scores').filter(function (r) { return Number(r[0]) === cls && (!pred || pred(r)); });
   if (!sc.length) return 0;
   const grp = {};
   rows_('Groups').forEach(function (r) {
@@ -227,6 +228,42 @@ function backupScores_(cls) {
   sh.getRange(start, 6, out.length, 1).setNumberFormat('@');
   sh.getRange(start, 1, out.length, 9).setValues(out);
   return out.length;
+}
+
+/**
+ * 한 반의 한 성별 경기 점수만 지웁니다(조 편성은 그대로).
+ * 양쪽 선수가 모두 그 성별인 경기만 대상이며, 지우기 전에 Backup 탭에 보관합니다.
+ */
+function clearScores_(p) {
+  const cls = Number(p.cls), sex = String(p.sex);
+  if (!(cls > 0) || (sex !== '남' && sex !== '여')) throw new Error('반과 성별을 확인하세요.');
+  const sexOf = {};
+  rows_('Students').forEach(function (r) { if (Number(r[1]) === cls) sexOf[Number(r[2])] = String(r[4] || '').trim(); });
+  const entrySex = {};
+  rows_('Groups').forEach(function (r) {
+    if (Number(r[0]) !== cls) return;
+    entrySex[Number(r[2])] = String(r[3]).trim().split(/\s+/).filter(Boolean).every(function (n) { return sexOf[Number(n)] === sex; });
+  });
+  const mine = function (r) {
+    if (Number(r[0]) !== cls) return false;
+    const k = keyOf_(r[1]).split('-');
+    return !!entrySex[Number(k[0])] && !!entrySex[Number(k[1])];
+  };
+  const target = rows_('Scores').filter(mine);
+  if (target.some(function (r) { return isLocked_(r[10]); })) {
+    return { ok: false, code: 'locked', error: cls + '반 ' + sex + '자 경기 중 확정된 것이 있어 지울 수 없습니다. 먼저 확정을 풀어 주세요.' };
+  }
+  const backed = backupScores_(cls, mine);
+  const sh = sheet_('Scores');
+  const data = sh.getDataRange().getValues();
+  let n = 0;
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (mine(data[i])) { sh.deleteRow(i + 1); n++; }
+  }
+  const now = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HH:mm:ss');
+  sheet_('Log').appendRow([now, 'admin', '교사', cls + '반 ' + sex + '자 점수 초기화 (' + backed + '개 Backup에 보관)']);
+  bust_();
+  return { ok: true, count: n, backed: backed };
 }
 
 function saveGroups_(p) {
