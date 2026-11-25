@@ -44,6 +44,10 @@
       sc[id] = pending[id] && S.scores[id] ? S.scores[id] : { sets: r.sets, locked: r.locked, by: r.by, at: r.at };
     });
     Object.keys(pending).forEach(function (id) { if (!sc[id] && S.scores[id]) sc[id] = S.scores[id]; });
+    Object.keys(S.scores).forEach(function (id) {
+      var l = S.scores[id]; if (!l || !l.keep || l.keep < Date.now()) return;
+      var s = sc[id]; if (!s || !l.at || s.at < l.at) sc[id] = l;
+    });
     S.scores = sc;
     var cl = classes();
     if (cl.length && cl.indexOf(S.cls) < 0) S.cls = cl[0];
@@ -296,7 +300,7 @@
     }
     var rec = S.scores[id] || { sets: [], locked: false };
     if (!any && !hasScore(rec.sets) && !S.draft[id]) { S.status = '점수를 입력하세요.'; setStatus(); return; }
-    S.scores[id] = { sets: sets, locked: rec.locked, by: whoStr(), at: rec.at };
+    S.scores[id] = { sets: sets, locked: rec.locked, by: whoStr(), at: rec.at, keep: Date.now() + 90000 };
     delete S.draft[id];
     pending[id] = true; clearTimeout(timers[id]); S.status = '저장 중…';
     doSave(cls, key);
@@ -304,8 +308,8 @@
   }
   function doSave(cls, key) {
     var id = cls + '|' + key, rec = S.scores[id];
-    api('saveScore', { cls: cls, key: key, sets: rec.sets, who: whoStr() }).then(function () {
-      delete pending[id];
+    api('saveScore', { cls: cls, key: key, sets: rec.sets, who: whoStr() }).then(function (j) {
+      delete pending[id]; if (S.scores[id] && j && j.at) S.scores[id].at = j.at;
       var d = new Date(); S.status = '저장됨 ' + ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); setStatus();
     }).catch(function (e) {
       if (e.code === 'locked') { delete pending[id]; S.status = e.message; refresh(true).catch(function () {}); return; }
@@ -356,7 +360,7 @@
     else if (t.dataset.act === 'cancelEdit') { delete S.draft[S.cls + '|' + t.dataset.k]; S.status = ''; }
     else if (t.dataset.act === 'build') {
       if (S.armed !== 'build') { readOpt(); S.armed = 'build'; render(); return; }
-      S.armed = null; S.draft = {}; S.open = {}; var b = buildGroups(S.cls, S.opt.assign, S.opt.split === '1', { '남': +S.opt.km || 1, '여': +S.opt.kf || 1, '*': +S.opt.ka || 1 });
+      S.armed = null; S.draft = {}; S.open = {}; S.scores = {}; var b = buildGroups(S.cls, S.opt.assign, S.opt.split === '1', { '남': +S.opt.km || 1, '여': +S.opt.kf || 1, '*': +S.opt.ka || 1 });
       S.status = '저장 중…'; setStatus();
       api('saveGroups', { cls: S.cls, entries: b.entries, groups: b.groups }).then(function () { S.status = '조 편성을 저장했습니다.'; return refresh(true); })
         .catch(function (er) { S.status = '저장 실패: ' + er.message; render(); });
