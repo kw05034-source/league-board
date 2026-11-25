@@ -54,6 +54,11 @@ function stamp_(v) {
   if (v instanceof Date) return Utilities.formatDate(v, TZ, 'yyyy-MM-dd HH:mm:ss');
   return String(v || '');
 }
+/** 경기 키('3-10')는 시트가 날짜로 바꿔 저장할 수 있어, 읽을 때 항상 '월-일' 문자열로 되돌립니다. */
+function keyOf_(v) {
+  if (v instanceof Date) return Utilities.formatDate(v, TZ, 'M') + '-' + Utilities.formatDate(v, TZ, 'd');
+  return String(v).trim();
+}
 function config_() {
   const map = {};
   rows_('Config').forEach(function (r) { map[String(r[0]).trim()] = r[1]; });
@@ -121,11 +126,15 @@ function load_(cfg, role) {
     .map(function (r) { return { cls: Number(r[1]), no: Number(r[2]), name: String(r[3]).trim(), sex: String(r[4] || ''), out: String(r[5] === undefined ? '' : r[5]).trim() !== '' }; });
   const groups = rows_('Groups').filter(function (r) { return r[0] !== ''; })
     .map(function (r) { return { cls: Number(r[0]), group: Number(r[1]), entry: Number(r[2]), members: String(r[3]), late: String(r[4] === undefined ? '' : r[4]).trim() !== '' }; });
-  const scores = rows_('Scores').filter(function (r) { return r[0] !== ''; }).map(function (r) {
+  const seen = {};
+  rows_('Scores').filter(function (r) { return r[0] !== ''; }).forEach(function (r) {
     const sets = [];
     for (let i = 0; i < 3; i++) sets.push([r[2 + i * 2], r[3 + i * 2]]);
-    return { cls: Number(r[0]), key: String(r[1]), sets: sets, at: stamp_(r[8]), by: String(r[9]), locked: isLocked_(r[10]) };
+    const o = { cls: Number(r[0]), key: keyOf_(r[1]), sets: sets, at: stamp_(r[8]), by: String(r[9]), locked: isLocked_(r[10]) };
+    const id = o.cls + '|' + o.key;
+    if (!seen[id] || seen[id].at <= o.at) seen[id] = o;
   });
+  const scores = Object.keys(seen).map(function (k) { return seen[k]; });
   const data = {
     ok: true, role: role, students: students, groups: groups, scores: scores,
     config: { mode: cfg.mode, size: cfg.size, sets: cfg.sets, win: cfg.win, draw: cfg.draw, loss: cfg.loss }
@@ -162,8 +171,11 @@ function saveScore_(p, role) {
   const sh = sheet_('Scores');
   const data = sh.getDataRange().getValues();
   let row = -1;
+  const dups = [];
   for (let i = 1; i < data.length; i++) {
-    if (Number(data[i][0]) === cls && String(data[i][1]) === key) { row = i + 1; break; }
+    if (Number(data[i][0]) === cls && keyOf_(data[i][1]) === key) {
+      if (row < 0) row = i + 1; else dups.push(i + 1);
+    }
   }
   if (row > 0 && isLocked_(data[row - 1][10]) && role !== 'admin') {
     return { ok: false, code: 'locked', error: '선생님이 확정한 경기는 고칠 수 없습니다.' };
@@ -172,8 +184,10 @@ function saveScore_(p, role) {
   const now = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HH:mm:ss');
   const locked = row > 0 ? data[row - 1][10] : '';
   const rec = [cls, key, sets[0][0], sets[0][1], sets[1][0], sets[1][1], sets[2][0], sets[2][1], now, who, locked];
-  if (row > 0) sh.getRange(row, 1, 1, SCORE_COLS).setValues([rec]);
-  else sh.appendRow(rec);
+  if (row < 0) { row = sh.getLastRow() + 1; }
+  sh.getRange(row, 2).setNumberFormat('@');
+  sh.getRange(row, 1, 1, SCORE_COLS).setValues([rec]);
+  for (let d = dups.length - 1; d >= 0; d--) sh.deleteRow(dups[d]);
   sheet_('Log').appendRow([now, role, who, cls + '반 ' + key + ' ' + JSON.stringify(sets)]);
   bust_();
   return { ok: true, at: now };
@@ -195,7 +209,7 @@ function backupScores_(cls) {
   const now = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HH:mm:ss');
   const out = [];
   sc.forEach(function (r) {
-    const k = String(r[1]).split('-');
+    const k = keyOf_(r[1]).split('-');
     const pts = [[r[2], r[3]], [r[4], r[5]], [r[6], r[7]]].filter(function (x) { return x[0] !== '' || x[1] !== ''; })
       .map(function (x) { return x[0] + ':' + x[1]; }).join(' / ');
     if (!pts) return;
@@ -284,7 +298,7 @@ function setLock_(p) {
   let n = 0;
   for (let i = 1; i < data.length; i++) {
     if (Number(data[i][0]) !== cls) continue;
-    if (p.key && String(data[i][1]) !== String(p.key)) continue;
+    if (p.key && keyOf_(data[i][1]) !== String(p.key)) continue;
     sh.getRange(i + 1, SCORE_COLS).setValue(val);
     n++;
   }
