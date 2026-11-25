@@ -127,6 +127,36 @@
         return '<tr class="' + (i === 0 && any ? 'first' : '') + '"><td class="rank">' + (any ? i + 1 : '-') + '</td><td class="nm">' + label(ent[r.id]) + '</td><td>' + r.p + '</td><td>' + r.w + '</td><td>' + r.d + '</td><td>' + r.l + '</td><td><b>' + r.pt + '</b></td><td>' + r.sf + ':' + r.sa + '</td><td>' + (d > 0 ? '+' : '') + d + '</td></tr>';
       }).join('') + '</tbody></table></div>';
   }
+  function matrixHtml(cls, gi) {
+    var ids = S.groups[cls][gi].filter(function (id) { return !gone(cls, id); }), ent = S.entries[cls], map = {}, played = {};
+    ids.forEach(function (id) { map[id] = {}; });
+    schedule(S.groups[cls][gi], cls).forEach(function (rd) { rd.forEach(function (m) {
+      var x = m[0], y = m[1]; if (!map[x] || !map[y]) return;
+      var r = result(setsOf(cls, x + '-' + y)); if (!r) return;
+      var sx = r.pa + ':' + r.pb, sy = r.pb + ':' + r.pa;
+      map[x][y] = { t: r.w === 'a' ? '승' : r.w === 'b' ? '패' : '무', s: sx };
+      map[y][x] = { t: r.w === 'b' ? '승' : r.w === 'a' ? '패' : '무', s: sy };
+    }); });
+    var nums = function (id) { return ent[id].m.map(function (s) { return s.no; }).join('·'); };
+    var me = null;
+    if (S.who && S.who.cls === cls) ids.forEach(function (id) { if (ent[id].m.some(function (s) { return s.no === S.who.no; })) me = id; });
+    var strip = '';
+    if (me !== null) {
+      var w = 0, l = 0, d = 0, left = [];
+      ids.forEach(function (o) { if (o === me) return; var c = map[me][o]; if (!c) left.push(label(ent[o])); else if (c.t === '승') w++; else if (c.t === '패') l++; else d++; });
+      strip = '<div class="mine"><b>내 현황</b> ' + w + '승 ' + l + '패' + (d ? ' ' + d + '무' : '') + ' · 아직 안 한 상대 ' + left.length + '명' +
+        (left.length ? '<div class="chips">' + left.map(function (n) { return '<span>' + n + '</span>'; }).join('') + '</div>' : ' 🎉 모두 끝냈어요') + '</div>';
+    }
+    return strip + '<h3 class="mxh">대진표 <small>칸이 비어 있으면 아직 안 한 경기예요</small></h3><div class="tbl mx"><table><thead><tr><th class="nm">이름</th>' +
+      ids.map(function (c) { return '<th class="' + (c === me ? 'me' : '') + '" title="' + esc(ent[c].m.map(function (s) { return s.name; }).join(' · ')) + '">' + nums(c) + '</th>'; }).join('') +
+      '</tr></thead><tbody>' + ids.map(function (r) {
+        return '<tr class="' + (r === me ? 'me' : '') + '"><td class="nm">' + label(ent[r]) + '</td>' + ids.map(function (c) {
+          if (c === r) return '<td class="self"></td>';
+          var x = map[r][c];
+          return x ? '<td class="res ' + (x.t === '승' ? 'w' : x.t === '패' ? 'l' : 'd') + '" title="' + x.s + '">' + x.t + '</td>' : '<td class="res"></td>';
+        }).join('') + '</tr>';
+      }).join('') + '</tbody></table></div>';
+  }
   function hasScore(sets) {
     return (sets || []).some(function (t) { return t && ((t[0] !== '' && t[0] != null) || (t[1] !== '' && t[1] != null)); });
   }
@@ -178,7 +208,7 @@
     }
     var pr = progress(S.cls), head = '<div class="prog">' + S.cls + '반 진행 ' + pr[0] + ' / ' + pr[1] + '경기</div>';
     if (S.view === 'table') {
-      m.innerHTML = head + '<div class="groups">' + g.map(function (_, gi) { return '<div class="card"><h2>' + gName(S.cls, gi) + '</h2>' + standHtml(S.cls, gi) + '</div>'; }).join('') + '</div>';
+      m.innerHTML = head + '<div class="groups">' + g.map(function (_, gi) { return '<div class="card"><h2>' + gName(S.cls, gi) + '</h2>' + standHtml(S.cls, gi) + matrixHtml(S.cls, gi) + '</div>'; }).join('') + '</div>';
       return;
     }
     m.innerHTML = head + '<div class="groups">' + g.map(function (ids, gi) {
