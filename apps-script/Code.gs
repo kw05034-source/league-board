@@ -114,7 +114,8 @@ function doPost(e) {
 
 function load_(cfg, role) {
   const cache = CacheService.getScriptCache();
-  const hit = cache.get('load');
+  const key = 'load' + ver_();
+  const hit = cache.get(key);
   if (hit) { const d = JSON.parse(hit); d.role = role; return d; }
   const students = rows_('Students').filter(function (r) { return String(r[3]).trim() !== ''; })
     .map(function (r) { return { cls: Number(r[1]), no: Number(r[2]), name: String(r[3]).trim(), sex: String(r[4] || ''), out: String(r[5] === undefined ? '' : r[5]).trim() !== '' }; });
@@ -129,12 +130,13 @@ function load_(cfg, role) {
     ok: true, role: role, students: students, groups: groups, scores: scores,
     config: { mode: cfg.mode, size: cfg.size, sets: cfg.sets, win: cfg.win, draw: cfg.draw, loss: cfg.loss }
   };
-  try { cache.put('load', JSON.stringify(data), 20); } catch (e) {}
+  try { cache.put(key, JSON.stringify(data), 20); } catch (e) {}
   return data;
 }
 
 /** 쓰기 뒤에는 캐시를 비워 모두에게 바로 보이게 합니다. */
-function bust_() { CacheService.getScriptCache().remove('load'); }
+function ver_() { return CacheService.getScriptCache().get('ver') || '0'; }
+function bust_() { CacheService.getScriptCache().put('ver', String(Date.now()) + String(Math.random()).slice(2, 6), 21600); }
 
 function cleanSets_(sets, n) {
   if (!Array.isArray(sets) || sets.length > 3) throw new Error('점수 형식이 올바르지 않습니다.');
