@@ -422,7 +422,16 @@
   });
 
   /* ---------- 시작 ---------- */
-  setInterval(function () { if (S.role && !document.hidden) refresh(false).catch(function () {}); }, 30000);
+  var lastPoll = Date.now();
+  function poll(force) {
+    if (!S.role || document.hidden) return;
+    if (!force && Date.now() - lastPoll < (S.role === 'admin' ? 8000 : 20000)) return;
+    lastPoll = Date.now(); refresh(false).catch(function () {});
+  }
+  setInterval(poll, 4000);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) poll(true); });
+  window.addEventListener('focus', function () { poll(true); });
+  document.addEventListener('focusout', function (e) { if (e.target && e.target.closest && e.target.closest('.match')) setTimeout(function () { poll(true); }, 400); });
   $('#title').textContent = C.title;
   start();
 })();
