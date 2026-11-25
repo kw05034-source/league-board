@@ -120,11 +120,11 @@
   /* ---------- 화면 조각 ---------- */
   function label(e) { return e.m.map(function (s) { return '<span class="no">' + s.no + '</span>' + esc(s.name); }).join(' · '); }
   function standHtml(cls, gi) {
-    var rows = standings(cls, gi), any = rows.some(function (r) { return r.p; }), ent = S.entries[cls];
-    return '<div class="tbl"><table><thead><tr><th>순위</th><th class="nm">이름</th><th>경기</th><th>승</th><th>무</th><th>패</th><th>승점</th><th>세트</th><th>득실</th></tr></thead><tbody>' +
+    var rows = standings(cls, gi), any = rows.some(function (r) { return r.p; }), ent = S.entries[cls], ns = S.cfg.sets !== 1;
+    return '<div class="tbl"><table><thead><tr><th>순위</th><th class="nm">이름</th><th>경기</th><th>승</th><th>무</th><th>패</th><th>승점</th>' + (ns ? '<th>세트</th>' : '') + '<th>득실</th></tr></thead><tbody>' +
       rows.map(function (r, i) {
         var d = r.pf - r.pa;
-        return '<tr class="' + (i === 0 && any ? 'first' : '') + '"><td class="rank">' + (any ? i + 1 : '-') + '</td><td class="nm">' + label(ent[r.id]) + '</td><td>' + r.p + '</td><td>' + r.w + '</td><td>' + r.d + '</td><td>' + r.l + '</td><td><b>' + r.pt + '</b></td><td>' + r.sf + ':' + r.sa + '</td><td>' + (d > 0 ? '+' : '') + d + '</td></tr>';
+        return '<tr class="' + (i === 0 && any ? 'first' : '') + '"><td class="rank">' + (any ? i + 1 : '-') + '</td><td class="nm">' + label(ent[r.id]) + '</td><td>' + r.p + '</td><td>' + r.w + '</td><td>' + r.d + '</td><td>' + r.l + '</td><td><b>' + r.pt + '</b></td>' + (ns ? '<td>' + r.sf + ':' + r.sa + '</td>' : '') + '<td>' + (d > 0 ? '+' : '') + d + '</td></tr>';
       }).join('') + '</tbody></table></div>';
   }
   function matrixHtml(cls, gi) {
