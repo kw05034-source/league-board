@@ -169,6 +169,9 @@ function saveScore_(p, role) {
   if (!(cls > 0) || !/^\d+-\d+$/.test(key)) throw new Error('경기 정보가 올바르지 않습니다.');
   const cfg = config_();
   const sets = cleanSets_(p.sets, cfg.sets);
+  if (sets.some(function (s) { return s[0] === 0 && s[1] === 0; })) {
+    return { ok: false, code: 'zero', error: '0대0은 입력할 수 없습니다.' };
+  }
   const sh = sheet_('Scores');
   const data = sh.getDataRange().getValues();
   let row = -1;
