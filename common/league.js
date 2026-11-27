@@ -340,6 +340,7 @@
     for (var i = 0; i < 3; i++) {
       var t = d[i] || ['', ''], a = t[0], b = t[1], ea = a === '' || a == null, eb = b === '' || b == null;
       if (i < n && ea !== eb) { S.status = '점수는 양쪽 모두 입력하세요.'; setStatus(); return; }
+      if (i < n && !ea && !eb && +a === 0 && +b === 0) { S.status = '0대0은 입력할 수 없습니다.'; setStatus(); return; }
       if (!ea && !eb) any = true;
       sets.push(i < n ? [ea ? '' : a, eb ? '' : b] : ['', '']);
     }
@@ -357,6 +358,7 @@
       delete pending[id]; if (S.scores[id] && j && j.at) S.scores[id].at = j.at;
       var d = new Date(); S.status = '저장됨 ' + ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); setStatus();
     }).catch(function (e) {
+      if (e.code === 'zero') { delete pending[id]; delete S.scores[id]; S.status = e.message; refresh(true).catch(function () {}); return; }
       if (e.code === 'locked') { delete pending[id]; S.status = e.message; refresh(true).catch(function () {}); return; }
       if (e.code === 'bad_code') { logout(); return; }
       S.status = '저장 실패: ' + e.message + ' (5초 뒤 다시 시도)'; setStatus();
